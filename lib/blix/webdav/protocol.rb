@@ -1,4 +1,5 @@
 require 'nokogiri'
+require 'uri'
 
 module Blix
   module WebDAV
@@ -161,6 +162,7 @@ module Blix
 
 
       def handle_move
+
         raise NotFound if not resource.exist?
         raise Locked if resource.locked?(request_locktoken('LOCK_TOKEN'))
 
@@ -638,11 +640,11 @@ module Blix
 
         def parse_destination dest_uri
           destination = url_unescape(dest_uri.path)
-          puts "AAAAAAAAAAA:#{destination}/#{@root}"
-          destination[@root.length-1..-1]
-          # destination.slice!(1..@root.length) if @root.length > 0
-          # destination =
-          # destination
+          root_length = Blix::Rest.path_root.length - 1
+          destination = destination[root_length..-1] if root_length > 0
+          destination = destination[@root.length-1..-1]
+          destination = '/' if destination.empty?
+          destination
         end
 
         def url_format_for_response(resource)

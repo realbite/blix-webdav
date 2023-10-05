@@ -3,7 +3,7 @@ require 'rake'
 
 Gem::Specification.new do |spec|
   spec.name = 'blix-webdav'
-  spec.version = '0.1.1'
+  spec.version = '0.1.2'
   spec.author  = "Clive Andrews"
   spec.email   = "pacman@realitybites.nl"
 
