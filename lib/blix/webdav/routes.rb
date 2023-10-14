@@ -8,21 +8,14 @@ module Blix
       module ClassMethods
         attr_reader :dav_root, :dav_prefix, :dav_options
 
-        def webdav_root(val)
-          @dav_root = val
-        end
-
-        def webdav_options(val)
-          @dav_options = val
-        end
-
         def webdav_path
           File.join(@dav_prefix ||'/','*path')
         end
 
-        def webdav_define_routes(prefix=nil)
+        def webdav_routes(options={})
+          @dav_options = options
 
-          @dav_prefix = prefix || '/'
+          @dav_prefix = @dav_options[:prefix] || '/'
           @dav_prefix = '/' + @dav_prefix unless @dav_prefix[0]=='/'
 
           route 'OPTIONS',  webdav_path , OPTIONS do
@@ -106,19 +99,16 @@ module Blix
 
       end # ClassMethods
 
-      def webdav_root
-        self.class.dav_root || raise( 'you must specify the webdav_root')
+      def webdav_params(params={})
+        @dav_params = self.class.dav_options.merge(params)
       end
 
-      def webdav_options
-        self.class.dav_options || {}
+      def _params
+        @dav_params || self.class.dav_options
       end
 
       def get_protocol
-        resource_path = path_params[:path]
-        prefix = Protocol.compute_path_prefix(path, resource_path)
-        resource = Blix::WebDAV::FileResource.new(resource_path,req,webdav_options.merge(:root=>webdav_root))
-        Protocol.new(resource, self, webdav_options.merge(:prefix=>prefix))
+        Protocol.new(path_params[:path], self, _params)
       end
 
       private

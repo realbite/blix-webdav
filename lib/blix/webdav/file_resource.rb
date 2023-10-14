@@ -7,6 +7,7 @@ module Blix::WebDAV
   class FileResource < Resource
 
     # If this is a collection, return the child resources.
+    # should this show hidden files
     def children
       Dir[file_path + '/*'].map do |path|
         child File.basename(path)
@@ -101,8 +102,9 @@ module Blix::WebDAV
     def get
       if stat.directory?
         content = String.new
-        Dir.new(File.join(root, path)).each do |line|
-          next if (line == '.') || (line == '..')
+        Dir.new(file_path).each do |line|
+          next if line[0] == '.' # no hidden files here please.
+          #next if (line == '.') || (line == '..')
           content << line << "\n"
         end
         content
@@ -136,6 +138,12 @@ module Blix::WebDAV
     # Delete this resource.
     def delete
       if stat.directory?
+        # there could be some hidden files lurking in the directory so ensure
+        # that the directory is empty first.
+        Dir.new(file_path).each do |line|
+          next if (line == '.') || (line == '..')
+          File.unlink(File.join(file_path,line)) if line[0]=='.'
+        end
         Dir.rmdir(file_path)
       else
         File.unlink(file_path)
@@ -256,7 +264,7 @@ module Blix::WebDAV
     # private
 
     def root
-      @options[:root]
+      @options[:root] || raise('you need to define webdav_options :root !!')
     end
 
     def file_path

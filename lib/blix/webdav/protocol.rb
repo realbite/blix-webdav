@@ -13,15 +13,16 @@ module Blix
 
       attr_reader :resource, :headers, :content, :status, :request
 
-      def initialize(resource, controller,options={})
+      def initialize(path, controller,options={})
+        @path       = path                   # path excluding the prefix
         @options    = options
-        @controller = controller          # blix rest controller
-        @resource = resource              # the webdav resource object.
-        @request  = @controller&.req       # the rack request
-        @status = 200                     # set the response status
-        @headers = {}                     # set response headers
-        @content = String.new             # set the response body.
-        @root    = ensure_path options[:prefix]
+        @controller = controller             # blix rest controller
+        @request    = @controller&.req       # the rack request
+        @status     = 200                    # set the response status
+        @headers    = {}                     # set response headers
+        @content    = String.new             # set the response body.
+        @resource   = resource_class.new(@path,@request,@options )
+        @prefix     =  ensure_path compute_path_prefix(@controller.path, @path)
       end
 
       def ensure_path(str)
@@ -51,23 +52,23 @@ module Blix
 
       def handle_head
         raise NotFound if not resource.exist?
-        headers['Etag'] = resource.etag
-        headers['Content-Type'] = resource.content_type
-        headers['Content-Length'] = resource.content_length.to_s  # FIXME
-        headers['Last-Modified'] = resource.last_modified.httpdate
+        headers['etag']           = resource.etag
+        headers['content-type']   = resource.content_type
+        headers['content-length'] = resource.content_length.to_s
+        headers['last-modified']  = resource.last_modified.httpdate
         self
       end
 
       def handle_get
         raise NotFound if not resource.exist?
-        headers['Etag'] = resource.etag
-        headers['Content-Type'] = resource.content_type
-        headers['Content-Length'] = resource.content_length.to_s
-        headers['Last-Modified'] = resource.last_modified.httpdate
+        headers['etag']           = resource.etag
+        headers['content-type']   = resource.content_type
+        headers['content-length'] = resource.content_length.to_s
+        headers['last-modified']  = resource.last_modified.httpdate
         map_exceptions do
           @content = resource.get
           if resource.collection?
-            headers['Content-Length'] = @content.bytesize.to_s
+            headers['content-length'] = @content.bytesize.to_s
           end
         end
         self
@@ -85,7 +86,7 @@ module Blix
           resource.put
         end
         set_status  Created
-        headers['Location'] = url_for(resource.path)
+        headers['location'] = url_for(resource.path)
         self
       end
 
@@ -134,7 +135,7 @@ module Blix
         raise BadGateway if dest_uri.host and dest_uri.host != request.host
         raise Forbidden  if destination == resource.path
 
-        dest = resource_class.new(destination, request, resource.options)
+        dest = resource_class.new(destination, @request, @options)
         raise PreconditionFailed if dest.exist? && !overwrite
         # Destination Lock Check
         locktoken = request_locktoken('LOCK_TOKEN')
@@ -172,7 +173,7 @@ module Blix
         raise BadGateway if dest_uri.host and dest_uri.host != request.host
         raise Forbidden if destination == resource.path
 
-        dest = resource_class.new(destination, request, resource.options)
+        dest = resource_class.new(destination, @request, @options)
         raise PreconditionFailed if dest.exist? && !overwrite
 
         dest_existed = dest.exist?
@@ -300,7 +301,7 @@ module Blix
       end
 
       def logit
-        if @options[:logger]
+        if @options[:verbose]
           Blix::Rest.logger.info "================================================================"
           Blix::Rest.logger.info "REQUST PATH==> #{resource.path}"
           Blix::Rest.logger.info "REQUST METHOD==> #{@controller.verb}"
@@ -350,11 +351,11 @@ module Blix
       end
 
       def url_for(path)
-        @controller.url_for(url_escape File.join(@root,path))
+        @controller.url_for(url_escape File.join(@prefix,path))
       end
 
       def resource_url(r)
-        @controller.url_for(url_escape File.join(@root,r.path))
+        @controller.url_for(url_escape File.join(@prefix,r.path))
       end
 
       def request_timeout
@@ -642,7 +643,7 @@ module Blix
           destination = url_unescape(dest_uri.path)
           root_length = Blix::Rest.path_root.length - 1
           destination = destination[root_length..-1] if root_length > 0
-          destination = destination[@root.length-1..-1]
+          destination = destination[@prefix.length-1..-1]
           destination = '/' if destination.empty?
           destination
         end
@@ -666,7 +667,9 @@ module Blix
           @_p.unescape(s)
         end
 
-        def self.compute_path_prefix(path, suffix)
+        # calculate the prefix thay was added to the path
+        # in order to contruct the full url.
+        def compute_path_prefix(path, suffix)
           path = path.chomp('/') + '/'
           suffix = suffix.chomp('/') + '/'
           suffix = '/' + suffix unless suffix[0] == '/'
